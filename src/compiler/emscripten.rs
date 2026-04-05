@@ -15,9 +15,7 @@
 use crate::compiler::args::*;
 use crate::compiler::c::{CCompilerImpl, CCompilerKind, ParsedArguments};
 use crate::compiler::gcc::ArgData::*;
-use crate::compiler::{
-    CCompileCommand, Cacheable, CompileCommand, CompilerArguments, gcc,
-};
+use crate::compiler::{CCompileCommand, Cacheable, CompileCommand, CompilerArguments, gcc};
 use crate::mock_command::CommandCreatorSync;
 use crate::{counted_array, dist};
 use async_trait::async_trait;

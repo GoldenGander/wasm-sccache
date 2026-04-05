@@ -168,6 +168,8 @@ pub enum CCompilerKind {
     TaskingVX,
     /// Emscripten
     Emscripten,
+    /// Binaryen wasm-opt
+    WasmOpt,
 }
 
 /// An interface to a specific C compiler.
@@ -1428,7 +1430,8 @@ impl pkg::ToolchainPackager for CToolchainPackager {
             CCompilerKind::Cicc
             | CCompilerKind::CudaFE
             | CCompilerKind::Ptxas
-            | CCompilerKind::Nvcc => {}
+            | CCompilerKind::Nvcc
+            | CCompilerKind::WasmOpt => {}
 
             CCompilerKind::Nvhpc => {
                 // Various programs called by the nvc nvc++ front end.

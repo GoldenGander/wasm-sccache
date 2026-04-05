@@ -30,6 +30,7 @@ use crate::compiler::nvhpc::Nvhpc;
 use crate::compiler::ptxas::Ptxas;
 use crate::compiler::rust::{Rust, RustupProxy};
 use crate::compiler::tasking_vx::TaskingVX;
+use crate::compiler::wasm_opt::WasmOpt;
 #[cfg(feature = "dist-client")]
 use crate::dist::pkg;
 #[cfg(feature = "dist-client")]
@@ -219,7 +220,7 @@ pub enum CompilerKind {
 // Used for tests
 // Need to be consistent with `Language`
 #[allow(dead_code)]
-const EXPECTED_LANGUAGE_COUNT: usize = 21;
+const EXPECTED_LANGUAGE_COUNT: usize = 22;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Language {
@@ -242,6 +243,7 @@ pub enum Language {
     CudaFE,
     Ptx,
     Cubin,
+    Wasm,
     Rust,
     Hip,
     CxxModule,
@@ -270,6 +272,7 @@ impl Language {
             Some("cu") => Some(Language::Cuda),
             Some("ptx") => Some(Language::Ptx),
             Some("cubin") => Some(Language::Cubin),
+            Some("wasm") | Some("wat") => Some(Language::Wasm),
             // TODO cy
             Some("rs") => Some(Language::Rust),
             Some("hip") => Some(Language::Hip),
@@ -299,6 +302,7 @@ impl Language {
             Language::CudaFE => "cuda",
             Language::Ptx => "ptx",
             Language::Cubin => "cubin",
+            Language::Wasm => "wasm",
             Language::Rust => "rust",
             Language::Hip => "hip",
             Language::CxxModule => "c++-module",
@@ -313,6 +317,7 @@ impl Language {
                 | Language::CxxPreprocessed
                 | Language::ObjectiveCPreprocessed
                 | Language::ObjectiveCxxPreprocessed
+                | Language::Wasm
                 | Language::Rust
         )
     }
@@ -360,6 +365,7 @@ impl Language {
             Language::CudaFE => None,
             Language::Ptx => None,
             Language::Cubin => None,
+            Language::Wasm => None,
             Language::Rust => None, // Let the compiler decide
             Language::Hip => Some("hip"),
             Language::GenericHeader => None, // Let the compiler decide
@@ -402,6 +408,7 @@ impl CompilerKind {
             Language::CudaFE => "CUDA (Device code)",
             Language::Ptx => "PTX",
             Language::Cubin => "CUBIN",
+            Language::Wasm => "WebAssembly",
             Language::Rust => "Rust",
             Language::Hip => "HIP",
         }
@@ -421,6 +428,7 @@ impl CompilerKind {
             CompilerKind::C(CCompilerKind::Nvhpc) => textual_lang + " [nvhpc]",
             CompilerKind::C(CCompilerKind::TaskingVX) => textual_lang + " [taskingvx]",
             CompilerKind::C(CCompilerKind::Emscripten) => textual_lang + " [emscripten]",
+            CompilerKind::C(CCompilerKind::WasmOpt) => textual_lang + " [wasm-opt]",
             CompilerKind::Rust => textual_lang,
         }
     }
@@ -1378,6 +1386,17 @@ fn is_nvidia_ptxas<P: AsRef<Path>>(p: P) -> bool {
     )
 }
 
+/// Returns true if the given path looks like wasm-opt
+fn is_binaryen_wasm_opt<P: AsRef<Path>>(p: P) -> bool {
+    matches!(
+        p.as_ref()
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_lowercase())
+            .as_deref(),
+        Some("wasm-opt")
+    )
+}
+
 /// Returns true if the given path looks like a c compiler program
 ///
 /// This does not check c compilers, it only report programs that are definitely not rustc
@@ -1470,6 +1489,17 @@ where
         return CCompiler::new(
             Ptxas {
                 // TODO: Use nvcc --version
+                version: Some(String::new()),
+            },
+            executable.to_owned(),
+            &pool,
+        )
+        .await
+        .map(|c| (Box::new(c) as Box<dyn Compiler<T>>, None));
+    } else if is_binaryen_wasm_opt(executable) {
+        debug!("Found wasm-opt");
+        return CCompiler::new(
+            WasmOpt {
                 version: Some(String::new()),
             },
             executable.to_owned(),
@@ -1951,6 +1981,7 @@ mod test {
             Language::CudaFE,
             Language::Ptx,
             Language::Cubin,
+            Language::Wasm,
             Language::Rust,
             Language::Hip,
         ];
@@ -2056,6 +2087,20 @@ mod test {
             .unwrap()
             .0;
         assert_eq!(CompilerKind::C(CCompilerKind::Emscripten), c.kind());
+    }
+
+    #[test]
+    fn test_detect_compiler_kind_wasm_opt() {
+        let f = TestFixture::new();
+        let creator = new_creator();
+        let runtime = single_threaded_runtime();
+        let pool = runtime.handle();
+        let wasm_opt = f.mk_bin("wasm-opt").unwrap();
+        let c = detect_compiler(creator, &wasm_opt, f.tempdir.path(), &[], &[], pool, None)
+            .wait()
+            .unwrap()
+            .0;
+        assert_eq!(CompilerKind::C(CCompilerKind::WasmOpt), c.kind());
     }
 
     #[test]

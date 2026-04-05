@@ -31,6 +31,7 @@ mod preprocessor_cache;
 mod ptxas;
 mod rust;
 mod tasking_vx;
+mod wasm_opt;
 #[macro_use]
 mod counted_array;
 

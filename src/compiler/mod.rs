@@ -22,6 +22,7 @@ mod clang;
 mod compiler;
 mod cudafe;
 mod diab;
+mod emscripten;
 mod gcc;
 mod msvc;
 mod nvcc;

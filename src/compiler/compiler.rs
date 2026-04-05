@@ -20,6 +20,7 @@ use crate::compiler::cicc::Cicc;
 use crate::compiler::clang::Clang;
 use crate::compiler::cudafe::CudaFE;
 use crate::compiler::diab::Diab;
+use crate::compiler::emscripten::Emscripten;
 use crate::compiler::gcc::Gcc;
 use crate::compiler::msvc;
 use crate::compiler::msvc::Msvc;
@@ -419,6 +420,7 @@ impl CompilerKind {
             CompilerKind::C(CCompilerKind::Ptxas) => textual_lang + " [ptxas]",
             CompilerKind::C(CCompilerKind::Nvhpc) => textual_lang + " [nvhpc]",
             CompilerKind::C(CCompilerKind::TaskingVX) => textual_lang + " [taskingvx]",
+            CompilerKind::C(CCompilerKind::Emscripten) => textual_lang + " [emscripten]",
             CompilerKind::Rust => textual_lang,
         }
     }
@@ -1396,6 +1398,8 @@ fn is_known_c_compiler<P: AsRef<Path>>(p: P) -> bool {
                 | "nvc"
                 | "nvc++"
                 | "nvcc"
+                | "emcc"
+                | "em++"
         )
     )
 }
@@ -1676,6 +1680,10 @@ compiler_id=msvc-clang
 #elif defined(__NVCOMPILER)
 compiler_id=nvhpc
 compiler_version=__NVCOMPILER_MAJOR__.__NVCOMPILER_MINOR__.__NVCOMPILER_PATCHLEVEL__
+#elif defined(__EMSCRIPTEN__) && defined(__cplusplus)
+compiler_id=em++
+#elif defined(__EMSCRIPTEN__)
+compiler_id=emcc
 #elif defined(__clang__) && defined(__cplusplus) && defined(__apple_build_version__)
 compiler_id=apple-clang++
 #elif defined(__clang__) && defined(__cplusplus)
@@ -1752,6 +1760,19 @@ compiler_version=__VERSION__
             .filter(|&line| line != "__VERSION__")
             .map(str::to_owned);
         match kind {
+            "emcc" | "em++" => {
+                debug!("Found {}", kind);
+                return CCompiler::new(
+                    Emscripten {
+                        emcplusplus: kind == "em++",
+                        version: version.clone(),
+                    },
+                    executable,
+                    &pool,
+                )
+                .await
+                .map(|c| Box::new(c) as Box<dyn Compiler<T>>);
+            }
             "clang" | "clang++" | "apple-clang" | "apple-clang++" => {
                 debug!("Found {}", kind);
                 return CCompiler::new(
@@ -2017,6 +2038,24 @@ mod test {
             .unwrap()
             .0;
         assert_eq!(CompilerKind::C(CCompilerKind::Clang), c.kind());
+    }
+
+    #[test]
+    fn test_detect_compiler_kind_emscripten() {
+        let f = TestFixture::new();
+        let creator = new_creator();
+        let runtime = single_threaded_runtime();
+        let pool = runtime.handle();
+        let emplusplus = f.mk_bin("em++").unwrap();
+        next_command(
+            &creator,
+            Ok(MockChild::new(exit_status(0), "compiler_id=em++\n", "")),
+        );
+        let c = detect_compiler(creator, &emplusplus, f.tempdir.path(), &[], &[], pool, None)
+            .wait()
+            .unwrap()
+            .0;
+        assert_eq!(CompilerKind::C(CCompilerKind::Emscripten), c.kind());
     }
 
     #[test]

@@ -166,6 +166,8 @@ pub enum CCompilerKind {
     Nvhpc,
     /// Tasking VX
     TaskingVX,
+    /// Emscripten
+    Emscripten,
 }
 
 /// An interface to a specific C compiler.
@@ -1407,7 +1409,7 @@ impl pkg::ToolchainPackager for CToolchainPackager {
 
         // Compiler-specific handling
         match self.kind {
-            CCompilerKind::Clang => {
+            CCompilerKind::Clang | CCompilerKind::Emscripten => {
                 // Clang uses internal header files, so add them.
                 if let Some(limits_h) = named_file("file", "include/limits.h") {
                     info!("limits_h = {}", limits_h.display());
